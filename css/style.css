@@ -242,12 +242,22 @@ h1 svg {
     border-radius: 32px;
     padding: 24px;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
-    transition: var(--transition-ios);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     min-height: 380px;
+    cursor: pointer;
+}
+
+.new-drop-zone:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--ios-blue);
+}
+
+.new-drop-zone:active {
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .new-drop-zone.drag-over {
@@ -634,8 +644,70 @@ input:checked + .switch-slider:before {
     background: rgba(255, 255, 255, 0.05);
 }
 
+.col-check { width: 44px; flex-shrink: 0; }
+.col-main { flex: 1; display: flex; align-items: center; min-width: 0; padding-right: 16px; }
+.col-date { width: 150px; flex-shrink: 0; font-size: 13px; color: var(--ios-secondary-label); text-align: right; }
+
+.item-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-right: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.file-thumbnail {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.item-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
 .folder-name {
+    font-size: 15px;
     font-weight: 500;
+    color: var(--ios-label);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-meta-sub {
+    font-size: 12px;
+    color: var(--ios-secondary-label);
+    margin-top: 2px;
+}
+
+.folder-header .col-main {
+    padding-left: 60px; /* 对齐内容区域 */
+}
+
+/* 移除旧样式 */
+.col-size { display: none; }
+.item-icon { display: none; }
+
+.file-thumbnail.mini {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    border-radius: 4px;
+}
+
+.result-file-info {
+    display: flex;
+    align-items: center;
 }
 
 .compress-btn-full {

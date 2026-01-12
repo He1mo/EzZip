@@ -195,13 +195,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (entry.kind === 'file') {
                 if (isImage(entry.name)) {
                     const file = await entry.getFile();
+                    let thumbnail = '';
+                    try {
+                        // 仅为图片生成缩略图 URL
+                        thumbnail = URL.createObjectURL(file);
+                    } catch (e) {
+                        console.error('Failed to create thumbnail', e);
+                    }
                     items.push({
                         name: entry.name,
                         type: 'file',
                         handle: entry,
                         size: file.size,
                         mtime: file.lastModified,
-                        path: entryPath
+                        path: entryPath,
+                        thumbnail: thumbnail
                     });
                 }
             } else if (entry.kind === 'directory') {
@@ -260,10 +268,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     </label>
                 </div>
                 <div class="col-main">
-                    <span class="item-icon">${item.type === 'folder' ? '📂' : '🖼️'}</span>
-                    <span class="folder-name">${item.name}</span>
+                    <div class="item-icon-wrapper">
+                        ${item.type === 'folder' ? '📂' : (item.thumbnail ? `<img src="${item.thumbnail}" class="file-thumbnail">` : '🖼️')}
+                    </div>
+                    <div class="item-info">
+                        <span class="folder-name">${item.name}</span>
+                        <span class="item-meta-sub">${item.type === 'file' ? formatSize(item.size) : ''}</span>
+                    </div>
                 </div>
-                <div class="col-size">${item.type === 'file' ? formatSize(item.size) : '-'}</div>
                 <div class="col-date">${item.mtime ? new Date(item.mtime).toLocaleString() : '-'}</div>
             `;
 
@@ -511,9 +523,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         AppState.results.forEach(res => {
             const ratio = res.compressedSize ? Math.round((1 - res.compressedSize / res.originalSize) * 100) : 0;
+            const thumbnail = AppState.selectedItems.find(i => i.name === res.name)?.thumbnail;
+            
             html += `
                 <tr>
-                    <td>${res.name}</td>
+                    <td>
+                        <div class="result-file-info">
+                            ${thumbnail ? `<img src="${thumbnail}" class="file-thumbnail mini">` : ''}
+                            <span>${res.name}</span>
+                        </div>
+                    </td>
                     <td>${formatSize(res.originalSize)}</td>
                     <td>${res.status === 'success' ? `${formatSize(res.compressedSize)} (-${ratio}%)` : '-'}</td>
                     <td class="status-${res.status}">${i18n[AppState.lang][res.status === 'success' ? 'tableSuccess' : 'tableError']}</td>
@@ -528,18 +547,40 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * 7. 事件监听
      */
-    UI.selectDirBtn.onclick = async () => {
-        if (!window.showDirectoryPicker) {
-            alert(i18n[AppState.lang].unsupportedBrowser);
-            return;
-        }
-        try {
-            AppState.rootHandle = await window.showDirectoryPicker();
-            AppState.selectedItems = [];
-            await updateFolderView(AppState.rootHandle, '');
-        } catch (err) {
-            console.error(err);
-        }
+    // 整个区域点击触发
+    UI.dropZone.onclick = (e) => {
+        // 如果点击的是 switch 或其子元素，不触发文件选择
+        if (e.target.closest('.ios-switch') || e.target.closest('.footer-action-btn')) return;
+        UI.selectDirBtn.click();
+    };
+
+    UI.selectDirBtn.onclick = async (e) => {
+        e.stopPropagation(); // 防止冒泡触发 dropZone.onclick
+        // 改为文件选择器，支持多选
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.multiple = true;
+        fileInput.accept = 'image/*';
+        
+        fileInput.onchange = async (e) => {
+            const files = Array.from(e.target.files);
+            const imageFiles = files
+                .filter(file => file.type.startsWith('image/'))
+                .map(file => ({
+                    handle: { getFile: async () => file },
+                    name: file.name,
+                    path: file.name,
+                    thumbnail: URL.createObjectURL(file),
+                    size: file.size,
+                    mtime: file.lastModified
+                }));
+
+            if (imageFiles.length > 0) {
+                processImmediateFiles(imageFiles);
+            }
+        };
+        
+        fileInput.click();
     };
 
     UI.compressBtn.onclick = startCompression;
@@ -617,7 +658,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     imageFiles.push({
                         handle: { getFile: async () => file },
                         name: fileName,
-                        path: fileName
+                        path: fileName,
+                        thumbnail: URL.createObjectURL(file),
+                        size: file.size,
+                        mtime: new Date().getTime()
                     });
                 }
             }
@@ -650,7 +694,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(file => ({
                 handle: { getFile: async () => file },
                 name: file.name,
-                path: file.name
+                path: file.name,
+                thumbnail: URL.createObjectURL(file),
+                size: file.size,
+                mtime: file.lastModified
             }));
 
         if (imageFiles.length > 0) {
@@ -662,13 +709,16 @@ document.addEventListener('DOMContentLoaded', () => {
      * 立即处理传入的文件列表（用于粘贴和拖放）
      */
     async function processImmediateFiles(imageFiles) {
-        AppState.selectedItems = imageFiles;
+        AppState.selectedItems = [...imageFiles];
+        AppState.currentItems = [...imageFiles]; // 也更新当前列表，以便 renderFolderList 使用
+        
         if (UI.autoConvertCheckbox.checked) {
             await startCompression();
         } else {
-            // 如果没开启自动压缩，则展示列表供确认（这里暂时简单处理，直接展示开始按钮）
             UI.folderTree.classList.remove('hidden-element');
-            if (UI.selectedPathDisplay) UI.selectedPathDisplay.textContent = AppState.lang === 'zh' ? '已就绪，点击下方按钮开始' : 'Ready, click button below';
+            // 隐藏面包屑，因为现在不是文件夹模式
+            UI.breadcrumbNav.style.display = 'none';
+            if (UI.selectedPathDisplay) UI.selectedPathDisplay.textContent = AppState.lang === 'zh' ? '已选择待处理图片' : 'Selected images to process';
             renderFolderList();
         }
     }
