@@ -1,0 +1,21 @@
+{
+  "name": "ezzip",
+  "version": "1.0.0",
+  "description": "Smart client-side image compression tool",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve public"
+  },
+  "keywords": [
+    "image",
+    "compression",
+    "frontend",
+    "jszip",
+    "browser-image-compression"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}
