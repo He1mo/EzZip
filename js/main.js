@@ -394,9 +394,10 @@ document.addEventListener('DOMContentLoaded', () => {
             UI.progressBarFill.style.width = `${progress}%`;
 
             try {
-                const options = {
-                    maxSizeMB: 1,
+                 const options = {
+                    maxSizeMB: 0.3, // 目标大小降至 300KB 以内
                     maxWidthOrHeight: 1920,
+                    initialQuality: 0.85, // 初始质量设为 0.85，兼顾画质与压缩率
                     useWebWorker: true
                 };
                 
