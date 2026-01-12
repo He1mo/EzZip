@@ -40,15 +40,40 @@
         </header>
 
         <!-- Phase 1: Input & Scan -->
-        <section id="phase-scan" class="glass-card phase-section phase-active">
-            <div class="search-container">
-                <div id="selectedPathDisplay" class="path-display" data-i18n="pathPlaceholder">点击右侧按钮选择包含图片的文件夹</div>
-                <button id="selectDirBtn" class="primary-btn">
-                    <span data-i18n="scanBtn">选择文件夹</span>
-                </button>
+        <section id="phase-scan" class="phase-section phase-active">
+            <div id="dropZone" class="new-drop-zone">
+                <div class="drop-zone-inner">
+                    <div class="drop-icon">
+                        <svg viewBox="0 0 120 120" width="100" height="100">
+                            <!-- 3D Box Illustration -->
+                            <path d="M60 20 L100 40 L60 60 L20 40 Z" fill="#4A90E2"/>
+                            <path d="M20 40 L60 60 L60 100 L20 80 Z" fill="#357ABD"/>
+                            <path d="M60 60 L100 40 L100 80 L60 100 Z" fill="#286090"/>
+                            <!-- Inner Shadow/Detail -->
+                            <path d="M40 50 L50 55 L50 75 L40 70 Z" fill="rgba(255,255,255,0.15)"/>
+                            <path d="M60 20 L80 30 L60 40 L40 30 Z" fill="rgba(255,255,255,0.2)"/>
+                        </svg>
+                    </div>
+                    <div class="drop-text-main" data-i18n="dropTitle">Drop your images here!</div>
+                    <div class="drop-text-sub" data-i18n="dropSub">Up to 20 images, max 5 MB each.</div>
+                </div>
+                <div class="drop-zone-footer">
+                    <div class="footer-left">
+                        <label class="ios-switch mini-switch">
+                            <input type="checkbox" id="autoConvertCheckbox" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                        <span class="footer-text" data-i18n="autoConvert">Convert my images automatically</span>
+                    </div>
+                    <button id="selectDirBtn" class="footer-action-btn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                        <span data-i18n="scanBtn">选择文件夹</span>
+                    </button>
+                </div>
             </div>
 
-            <div id="safetyPanel" class="safety-panel">
+            <div id="safetyPanel" class="safety-panel hidden-element">
+                <!-- Keep hidden for now, integrated into zip logic -->
                 <div class="safety-info">
                     <div id="safetyIcon" class="safety-icon-wrapper">📦</div>
                     <div class="safety-text">

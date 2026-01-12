@@ -5,8 +5,12 @@ const i18n = {
     zh: {
         title: 'EzZip',
         subtitle: '轻松简单的压缩',
-        pathPlaceholder: '点击右侧按钮选择包含图片的文件夹',
-        scanBtn: '选择文件夹',
+        dropTitle: '把图片拖到这里',
+        dropSub: '支持批量拖入，单张图片自动下载',
+        autoConvert: '自动开始压缩处理',
+        pathPlaceholder: '点击右侧按钮选择文件夹，或直接在此处粘贴/拖入图片',
+        pasteHint: '支持 Ctrl+V 粘贴剪贴板图片',
+        scanBtn: '扫描文件夹',
         scanning: '正在扫描...',
         selectFolders: '选择目标文件夹',
         selectAll: '全选 / 取消',
@@ -14,6 +18,7 @@ const i18n = {
         sortByName: '名称',
         sortByTime: '修改日期',
         downloadZipTitle: '打包下载',
+        saveImage: '保存图片',
         downloadZipDesc: '压缩完成后将所有图片打包为 ZIP 下载',
         startBtn: '开始批量压缩',
         initializing: '准备处理...',
@@ -45,8 +50,12 @@ const i18n = {
     en: {
         title: 'EzZip',
         subtitle: 'Easy and simple compression',
-        pathPlaceholder: 'Click button to select a folder with images',
-        scanBtn: 'Select Folder',
+        dropTitle: 'Drop your images here!',
+        dropSub: 'Up to 20 images, max 5 MB each.',
+        autoConvert: 'Convert my images automatically',
+        pathPlaceholder: 'Click button to select folder, or paste/drop images here',
+        pasteHint: 'Support Ctrl+V to paste images from clipboard',
+        scanBtn: 'Scan Folder',
         scanning: 'Scanning...',
         selectFolders: 'Select Target Folders',
         selectAll: 'Select All',
@@ -54,6 +63,7 @@ const i18n = {
         sortByName: 'Name',
         sortByTime: 'Modified',
         downloadZipTitle: 'Download ZIP',
+        saveImage: 'Save Image',
         downloadZipDesc: 'Pack all optimized images into a ZIP file',
         startBtn: 'Start Compression',
         initializing: 'Initializing...',
@@ -106,10 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
         selectDirBtn: document.getElementById('selectDirBtn'),
         selectedPathDisplay: document.getElementById('selectedPathDisplay'),
         zipCheckbox: document.getElementById('zipCheckbox'),
+        autoConvertCheckbox: document.getElementById('autoConvertCheckbox'),
         folderTree: document.getElementById('folderTree'),
         folderList: document.getElementById('folderList'),
         selectAllCheckbox: document.getElementById('selectAllCheckbox'),
         compressBtn: document.getElementById('compressBtn'),
+        dropZone: document.getElementById('dropZone'),
         phaseScan: document.getElementById('phase-scan'),
         phaseWork: document.getElementById('phase-work'),
         phaseResult: document.getElementById('phase-result'),
@@ -208,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function updateFolderView(handle, path = '') {
         AppState.currentHandle = handle;
-        UI.selectedPathDisplay.textContent = path || handle.name;
+        if (UI.selectedPathDisplay) UI.selectedPathDisplay.textContent = path || handle.name;
         UI.folderTree.classList.remove('hidden-element');
         
         addLog(AppState.lang === 'zh' ? `正在扫描: ${handle.name}` : `Scanning: ${handle.name}`);
@@ -363,8 +375,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = await item.handle.getFile();
             
             UI.statusText.textContent = `${i18n[AppState.lang].optimizing} (${item.name})`;
-            UI.progressStats.textContent = `${i + 1} / ${total} (${Math.round(((i + 1) / total) * 100)}%)`;
-            UI.progressBarFill.style.width = `${((i + 1) / total) * 100}%`;
+            
+            // 改进进度显示：确保 100% 时任务真的结束了
+            const progress = ((i + 0.9) / total) * 100; 
+            UI.progressStats.textContent = `${i + 1} / ${total} (${Math.round(progress)}%)`;
+            UI.progressBarFill.style.width = `${progress}%`;
 
             try {
                 const options = {
@@ -373,21 +388,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     useWebWorker: true
                 };
                 
-                const compressedFile = await imageCompression(file, options);
+                let compressedFile = await imageCompression(file, options);
+                
+                // 修复反向压缩逻辑：如果压缩后变大，则使用原文件
+                let finalFile = compressedFile;
+                let isOptimized = true;
+                if (compressedFile.size >= file.size) {
+                    finalFile = file;
+                    isOptimized = false;
+                }
                 
                 AppState.results.push({
                     name: item.name,
                     originalSize: file.size,
-                    compressedSize: compressedFile.size,
+                    compressedSize: finalFile.size,
                     status: 'success',
-                    blob: compressedFile
+                    blob: finalFile
                 });
 
                 if (jszip) {
-                    jszip.file(item.path, compressedFile);
+                    jszip.file(item.path, finalFile);
                 }
 
-                addLog(`${i18n[AppState.lang].tableSuccess}: ${item.name} (${formatSize(file.size)} -> ${formatSize(compressedFile.size)})`, 'success');
+                const ratio = ((1 - finalFile.size / file.size) * 100).toFixed(0);
+                const logMsg = isOptimized 
+                    ? `${i18n[AppState.lang].tableSuccess}: ${item.name} (${formatSize(file.size)} -> ${formatSize(finalFile.size)}, -${ratio}%)`
+                    : `${i18n[AppState.lang].tableSuccess}: ${item.name} (${i18n[AppState.lang].optimized})`;
+                addLog(logMsg, 'success');
             } catch (err) {
                 console.error(err);
                 AppState.results.push({
@@ -398,35 +425,73 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 addLog(`${i18n[AppState.lang].tableError}: ${item.name}`, 'error');
             }
-        }
-
-        if (jszip && !AppState.isCancelled) {
-            UI.statusText.textContent = AppState.lang === 'zh' ? '正在生成 ZIP...' : 'Generating ZIP...';
-            AppState.zipResult = await jszip.generateAsync({ type: 'blob' });
-        }
-
-        finishCompression();
     }
+
+    if (jszip && !AppState.isCancelled && total > 1) {
+        UI.statusText.textContent = AppState.lang === 'zh' ? '正在打包 ZIP...' : 'Generating ZIP...';
+        // ZIP 生成期间进度条保持在 99%
+        UI.progressBarFill.style.width = '99%';
+        AppState.zipResult = await jszip.generateAsync({ type: 'blob' });
+    }
+
+    // 只有在所有工作（包括 ZIP）完成后才设置 100%
+    UI.progressBarFill.style.width = '100%';
+    UI.progressStats.textContent = `${total} / ${total} (100%)`;
+
+    finishCompression();
+}
 
     function finishCompression() {
         AppState.isProcessing = false;
         switchPhase('phase-result');
         
-        const successCount = AppState.results.filter(r => r.status === 'success').length;
+        const successResults = AppState.results.filter(r => r.status === 'success');
+        const successCount = successResults.length;
         UI.resultSummary.textContent = i18n[AppState.lang].processedCount.replace('{count}', successCount);
         
         renderResultTable();
         
-        if (AppState.zipResult) {
+        if (successCount > 0) {
             UI.downloadZipBtn.classList.remove('hidden-element');
-            UI.downloadZipBtn.onclick = () => {
-                const url = URL.createObjectURL(AppState.zipResult);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `EzZip_${new Date().getTime()}.zip`;
-                a.click();
-                URL.revokeObjectURL(url);
-            };
+            
+            if (successCount === 1) {
+                // 单个文件直接下载图片
+                const result = successResults[0];
+                UI.downloadZipBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 8px;"><path d="M12 2L12 15M12 15L8 11M12 15L16 11M5 20L19 20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    ${i18n[AppState.lang].saveImage}
+                `;
+                
+                const downloadFn = () => {
+                    const url = URL.createObjectURL(result.blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = result.name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+                
+                UI.downloadZipBtn.onclick = downloadFn;
+                
+                // 自动触发下载
+                downloadFn();
+            } else if (AppState.zipResult) {
+                // 多个文件下载 ZIP
+                UI.downloadZipBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 8px;"><path d="M12 2L12 15M12 15L8 11M12 15L16 11M5 20L19 20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    ${i18n[AppState.lang].downloadZipTitle}
+                `;
+                UI.downloadZipBtn.onclick = () => {
+                    const url = URL.createObjectURL(AppState.zipResult);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `EzZip_${new Date().getTime()}.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+            }
+        } else {
+            UI.downloadZipBtn.classList.add('hidden-element');
         }
     }
 
@@ -477,11 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    UI.compressBtn.onclick = () => {
-        if (AppState.selectedItems.length > 0) {
-            startCompression();
-        }
-    };
+    UI.compressBtn.onclick = startCompression;
 
     UI.cancelBtn.onclick = () => {
         if (confirm(i18n[AppState.lang].cancelConfirm)) {
@@ -541,6 +602,76 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderFolderList();
     };
+
+    // 粘贴图片处理
+    window.addEventListener('paste', async (e) => {
+        const items = e.clipboardData.items;
+        const imageFiles = [];
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    // 为粘贴的文件生成一个名称
+                    const extension = file.type.split('/')[1] || 'png';
+                    const fileName = `pasted-image-${new Date().getTime()}.${extension}`;
+                    imageFiles.push({
+                        handle: { getFile: async () => file },
+                        name: fileName,
+                        path: fileName
+                    });
+                }
+            }
+        }
+        if (imageFiles.length > 0) {
+            processImmediateFiles(imageFiles);
+        }
+    });
+
+    // 拖拽图片处理
+    UI.dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        UI.dropZone.classList.add('drag-over');
+    });
+
+    UI.dropZone.addEventListener('dragleave', (e) => {
+        // 只有当离开容器本身而不是子元素时才移除类
+        if (e.relatedTarget === null || !UI.dropZone.contains(e.relatedTarget)) {
+            UI.dropZone.classList.remove('drag-over');
+        }
+    });
+
+    UI.dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        UI.dropZone.classList.remove('drag-over');
+        
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files
+            .filter(file => file.type.startsWith('image/'))
+            .map(file => ({
+                handle: { getFile: async () => file },
+                name: file.name,
+                path: file.name
+            }));
+
+        if (imageFiles.length > 0) {
+            processImmediateFiles(imageFiles);
+        }
+    });
+
+    /**
+     * 立即处理传入的文件列表（用于粘贴和拖放）
+     */
+    async function processImmediateFiles(imageFiles) {
+        AppState.selectedItems = imageFiles;
+        if (UI.autoConvertCheckbox.checked) {
+            await startCompression();
+        } else {
+            // 如果没开启自动压缩，则展示列表供确认（这里暂时简单处理，直接展示开始按钮）
+            UI.folderTree.classList.remove('hidden-element');
+            if (UI.selectedPathDisplay) UI.selectedPathDisplay.textContent = AppState.lang === 'zh' ? '已就绪，点击下方按钮开始' : 'Ready, click button below';
+            renderFolderList();
+        }
+    }
 
     // 初始化
     if (AppState.theme === 'light') document.body.parentElement.classList.add('light-mode');
